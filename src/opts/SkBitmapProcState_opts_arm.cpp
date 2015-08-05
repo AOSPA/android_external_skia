@@ -841,9 +841,9 @@ void SkBitmapProcState::platformProcs() {
     switch (fBitmap->config()) {
         case SkBitmap::kIndex8_Config:
 #if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
-                if ((SkShader::kRepeat_TileMode == fTileModeX) &&
-                           (SkShader::kRepeat_TileMode == fTileModeY)) {
-                    fShaderProc32 = Repeat_SI8_opaque_D32_filter_DX_shaderproc;
+            if ((SkShader::kRepeat_TileMode == fTileModeX) &&
+                    (SkShader::kRepeat_TileMode == fTileModeY)) {
+                fShaderProc32 = Repeat_SI8_opaque_D32_filter_DX_shaderproc;
 #endif
 #if 0   /* crashing on android device */
                 fSampleProc16 = SI8_D16_nofilter_DX_arm;
@@ -854,7 +854,9 @@ void SkBitmapProcState::platformProcs() {
                     fSampleProc32 = SI8_opaque_D32_nofilter_DX_arm;
                     fShaderProc32 = NULL;
                 }
+#if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
             }
+#endif
             break;
         case SkBitmap::kRGB_565_Config:
 #if defined(__ARM_HAVE_NEON) && defined(SK_CPU_LENDIAN)
