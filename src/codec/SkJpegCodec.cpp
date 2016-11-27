@@ -80,7 +80,6 @@ SkJpegCodec::SkJpegCodec(const SkImageInfo& srcInfo, SkStream* stream,
     : INHERITED(srcInfo, stream)
     , fDecoderMgr(decoderMgr)
     , fReadyState(decoderMgr->dinfo()->global_state)
-    , fSrcRow(nullptr)
     , fSwizzlerSubset(SkIRect::MakeEmpty())
 {}
 
@@ -156,11 +155,6 @@ bool SkJpegCodec::onRewind() {
     }
     SkASSERT(nullptr != decoderMgr);
     fDecoderMgr.reset(decoderMgr);
-
-    fSwizzler.reset(nullptr);
-    fSrcRow = nullptr;
-    fStorage.free();
-
     return true;
 }
 
@@ -421,6 +415,10 @@ SkCodec::Result SkJpegCodec::onStartScanlineDecode(const SkImageInfo& dstInfo,
         return kInvalidConversion;
     }
 
+    // Remove objects used for sampling.
+    fSwizzler.reset(nullptr);
+    fSrcRow = nullptr;
+    fStorage.free();
 #ifdef DCT_IFAST_SUPPORTED
     (fDecoderMgr->dinfo())->dct_method = JDCT_IFAST;
 #else
