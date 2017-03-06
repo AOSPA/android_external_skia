@@ -49,7 +49,8 @@ LOCAL_FDO_SUPPORT := true
 # This should be the last -Oxxx specified in LOCAL_CFLAGS
 LOCAL_CFLAGS += -O3
 
-LOCAL_ARM_MODE := thumb
+LOCAL_ARM_MODE := arm
+
 # used for testing
 #LOCAL_CFLAGS += -g -O0
 
@@ -251,6 +252,9 @@ LOCAL_SRC_FILES := \
 	src/core/SkSpriteBlitter_ARGB32.cpp \
 	src/core/SkSpriteBlitter_RGB16.cpp \
 	src/core/SkSpriteBlitter4f.cpp \
+	src/core/SkBitmapProcShader_opt.cpp \
+	src/core/SkBitmap_debugger.cpp \
+	src/core/SkSpriteBlitter_S16_D32.cpp \
 	src/core/SkStream.cpp \
 	src/core/SkString.cpp \
 	src/core/SkStringUtils.cpp \
@@ -664,6 +668,8 @@ LOCAL_SRC_FILES := \
 	third_party/ktx/ktx.cpp
 
 LOCAL_SHARED_LIBRARIES := \
+	libcutils \
+	libutils \
 	liblog \
 	libGLESv2 \
 	libEGL \
