@@ -225,6 +225,47 @@ int SkRegion::count_runtype_values(int* itop, int* ibot) const {
     return maxT;
 }
 
+// tao.zeng, add code for small aligned 4 bytes cpy
+void inline memcpy_small_a4(void *dst, void *src, int count)
+{
+    asm volatile (
+        "cmp        %[count], #8                    \n"
+        "blt        memcpy_small_a4_less_8          \n"
+        "pld        [%[src]]                        \n"
+        "sub        %[count], %[count], #8          \n"
+    "memcpy_small_a4_loop8:                         \n"
+        "vldmia     %[src]!, {d0, d1, d2, d3}       \n"
+        "pld        [%[src], #32]                   \n"
+        "subs       %[count], %[count], #8          \n"
+        "vstmia     %[src]!, {d0, d1, d2, d3}       \n"
+        "bge        memcpy_small_a4_loop8           \n"
+        "adds       %[count], %[count], #8          \n"
+        "beq        out                             \n"
+    "memcpy_small_a4_less_8:                        \n"
+        "cmp        %[count], #4                    \n"
+        "blt        memcpy_small_a4_less_4          \n"
+        "vldmia     %[src]!, {d0, d1}               \n"
+        "subs       %[count], %[count], #4          \n"
+        "vstmia     %[dst]!, {d0, d1}               \n"
+        "beq        out                             \n"
+    "memcpy_small_a4_less_4:                        \n"
+        "cmp        %[count], #2                    \n"
+        "itt        ge                              \n"
+        "ldmge      %[src]!, {r3, r12}              \n"
+        "subges     %[count], %[count], #2          \n"
+        "it         ge                              \n"
+        "stmge      %[src]!, {r3, r12}              \n"
+        "it         eq                              \n"
+        "beq        out                             \n"
+        "ldr        r12, [%[src]], #4               \n"
+        "str        r12, [%[dst]], #4               \n"
+    "out:                                           \n"
+        :
+        :[src] "r" (src), [dst] "r" (dst), [count] "r" (count)
+        :"cc", "memory", "r3", "r12"
+    );
+}
+
 static bool isRunCountEmpty(int count) {
     return count <= 2;
 }
@@ -289,7 +330,15 @@ bool SkRegion::setRuns(RunType runs[], int count) {
     // must call this before we can write directly into runs()
     // in case we are sharing the buffer with another region (copy on write)
     fRunHead = fRunHead->ensureWritable();
-    memcpy(fRunHead->writable_runs(), runs, count * sizeof(RunType));
+#if !defined(__aarch64__)
+    if (!count && count <0x20) {                                        // tao.zeng, add
+        memcpy_small_a4(fRunHead->writable_runs(), runs, count);
+    } else {
+#endif
+        memcpy(fRunHead->writable_runs(), runs, count * sizeof(RunType));
+#if !defined(__aarch64__)
+    }
+#endif
     fRunHead->computeRunBounds(&fBounds);
 
     SkDEBUGCODE(this->validate();)

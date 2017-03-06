@@ -48,6 +48,147 @@ static void S32_D565_Blend(uint16_t* SK_RESTRICT dst,
 static void S32A_D565_Opaque(uint16_t* SK_RESTRICT dst,
                                const SkPMColor* SK_RESTRICT src, int count,
                                U8CPU alpha, int /*x*/, int /*y*/) {
+#if defined(__aarch64__)
+    if (count <= 0) {
+        return ;
+    }
+    asm volatile (
+        "cmp        %[count], #16                           \n" // count > 16
+        "movi       v16.16b,  #0x07                         \n" // mask
+        "b.lt       S32A_D565_Opaque_arm_less_16            \n"
+
+    "S32A_D565_Opaque_arm_loop16:                           \n"
+        "ld4        {v0.16b - v3.16b}, [%[src]], #64        \n" // load 16 src
+        "ld2        {v4.16b, v5.16b}, [%[dst]]              \n" // load 16 dst
+        "sub        %[count],  %[count],  #16               \n" // count -=16
+        "mov        x6, v3.d[0]                             \n"
+        "mov        x7, v3.d[1]                             \n"
+        "and        x6, x6, x7                              \n"
+        "cmp        x6, #0xffffffffffffffff                 \n"
+        "b.eq       S32A_D565_Opaque_arm_alpha255           \n"
+        /*
+         * alpha is not 255
+         */
+        "shl        v7.16b, v5.16b, #5                      \n" // v7 = high 3 bits of G
+        "shl        v6.16b, v4.16b, #3                      \n" // v6 = B
+        "mvn        v3.16b, v3.16b                          \n" // alpha = 255 - alpha
+        "sri        v7.16b, v4.16b, #3                      \n" // v7 = G
+        "bic        v5.16b, v5.16b, v16.16b                 \n" // v5 = R
+
+        "umull2     v18.8h, v6.16b, v3.16b                  \n" // v18 = B[15 - 8].16
+        "umull      v17.8h, v6.8b, v3.8b                    \n" // v17 = B[ 7 - 0].16
+        "umull2     v20.8h, v7.16b, v3.16b                  \n" // v20 = G[15 - 8].16
+        "umull      v19.8h, v7.8b, v3.8b                    \n" // v19 = G[ 7 - 0].16
+        "umull2     v22.8h, v5.16b, v3.16b                  \n" // v22 = R[15 - 8].16
+        "umull      v21.8h, v5.8b, v3.8b                    \n" // v21 = R[ 7 - 0].16
+
+
+        "shrn       v23.8b,  v17.8h, #8                     \n" //v23 = B[ 7 - 8].8
+        "shrn2      v23.16b, v18.8h, #8                     \n" //v23 = B[15 - 8].8
+        "shrn       v24.8b,  v19.8h, #8                     \n" //v24 = G[ 7 - 8].8
+        "shrn2      v24.16b, v20.8h, #8                     \n" //v24 = G[15 - 8].8
+        "shrn       v25.8b,  v21.8h, #8                     \n" //v25 = R[ 7 - 8].8
+        "shrn2      v25.16b, v22.8h, #8                     \n" //v25 = R[15 - 8].8
+
+        "uqadd      v2.16b, v2.16b, v23.16b                 \n" // v2 = result B
+        "uqadd      v1.16b, v1.16b, v24.16b                 \n" // v1 = result G
+        "uqadd      v0.16b, v0.16b, v25.16b                 \n" // v0 = result R
+
+    "S32A_D565_Opaque_arm_alpha255:                         \n"
+        "shl        v18.16b, v1.16b, #3                     \n" // low 3bits of G
+        "cmp        %[count], #16                           \n"
+
+        "mov        v19.16b, v0.16b                         \n"     // R
+        "sri        v18.16b, v2.16b, #3                     \n"     // B
+        "sri        v19.16b, v1.16b, #5                     \n"     // high 3 bits of G
+
+        "st2        {v18.16b, v19.16b}, [%[dst]], #32       \n"
+        "b.ge       S32A_D565_Opaque_arm_loop16             \n"
+        "cmp        %[count], #0                            \n"
+        "b.eq       out                                     \n"
+
+    "S32A_D565_Opaque_arm_less_16:                          \n"
+        "cmp        %[count], #8                            \n"
+        "b.lt       S32A_D565_Opaque_arm_less_8             \n"
+
+        "ld4        {v0.8b - v3.8b}, [%[src]], #32          \n"
+        "ld2        {v4.8b, v5.8b}, [%[dst]]                \n"
+        "mov        x6, v3.d[0]                             \n"
+        "cmp        x6, #0xffffffffffffffff                 \n"
+        "b.eq       S32A_D565_Opaque_arm_alpha255_1         \n"
+        /*
+         * alpha is not 255
+         */
+        "shl        v7.8b, v5.8b, #5                        \n" // v7 = high 3 bits of G
+        "shl        v6.8b, v4.8b, #3                        \n" // v6 = B
+        "mvn        v3.8b, v3.8b                            \n" // alpha = 255 - alpha
+        "sri        v7.8b, v4.8b, #3                        \n" // v7 = G
+        "bic        v5.8b, v5.8b, v16.8b                    \n" // v5 = R
+
+        "umull      v17.8h, v6.8b, v3.8b                    \n" // v17 = B[ 7 - 0].16
+        "umull      v19.8h, v7.8b, v3.8b                    \n" // v19 = G[ 7 - 0].16
+        "umull      v21.8h, v5.8b, v3.8b                    \n" // v21 = R[ 7 - 0].16
+
+        "shrn       v18.8b,  v17.8h, #8                     \n" //v18 = B[ 7 - 8].8
+        "shrn       v20.8b,  v19.8h, #8                     \n" //v20 = G[ 7 - 8].8
+        "shrn       v22.8b,  v21.8h, #8                     \n" //v22 = R[ 7 - 8].8
+
+        "uqadd      v5.8b, v2.8b, v18.8b                    \n" // v5 = result B
+        "uqadd      v6.8b, v1.8b, v20.8b                    \n" // v6 = result G
+        "uqadd      v7.8b, v0.8b, v22.8b                    \n" // v7 = result R
+
+    "S32A_D565_Opaque_arm_alpha255_1:                       \n"
+        "sri        v7.8b, v6.8b, #5                        \n" // v7 = result R | high 3 bits of G
+        "shl        v6.8b, v6.8b, #3                        \n" // v6 = result low 3 bits of G
+        "sri        v6.8b, v5.8b, #3                        \n" // v6 = insirt result B
+        "subs       %[count],  %[count],  #8                \n" // count -= 8
+        "st2        {v6.8b, v7.8b}, [%[dst]], #16           \n"
+        "b.eq       out                                     \n"
+
+        /*
+         * remain pixel, use ARM instruciton
+         */
+    "S32A_D565_Opaque_arm_less_8:                           \n"
+        "ldr        x13, =0x00ff00ff                        \n"
+
+    "one_pixel:                                             \n"
+        "ldr        w9, [%[src]], #4                        \n" // x9 = A0 B0 G0 R0
+        "ldrh       w8, [%[dst]]                            \n" // x8 = 00 00 00 | r0 g0 b0, rgb565
+
+        "mov        x11, #0xff                              \n"
+        "subs       x14, x11,  x9,  lsr #24                 \n" // x14 = scale
+        "b.eq       zero_alpha_one                          \n"
+
+        "and        x10,  x13,  x8,  lsr #8                 \n" // x10  = 00 00 00 r0
+        "and        x12,  x13,  x8,  lsl #19                \n" // x12  = 00 b0 00 00
+        "orr        x10,  x12,  x10                         \n" // x10  = 00 b0 00 r0
+        "and        x11,  x13,  x8,  lsr #3                 \n" // x11  = 00 00 00 g0
+        "mul        x10,  x10,  x14                         \n" // x10  = B0 B0 R0 R0
+        "mul        x11,  x11,  x14                         \n" // x11  = 00 00 G0 G0
+        "and        x10,  x13,  x10,  lsr #8                \n" // x10  = 00 B0 00 R0
+        "and        x11,  x11,  #0xff00                     \n" // x11  = 00 00 G0 00
+        "orr        x11,  x10,  x11                         \n" // x11  = 00 B0 G0 R0
+        "add        x9,  x9,  x11                           \n"
+
+    "zero_alpha_one:                                        \n" // down scale ARGB8888 to RGB565
+        "lsl        x11,  x9,  #8                           \n" // x11  = B0 G0 R0 00
+        "lsr        x12,  x9,  #5                           \n" // x12  = ** ** *g g*
+        "and        x10,  x11,  #0xf800                     \n" // x10  = 00 00 r0 00
+        "and        x12,  x12,  #0x7e0                      \n" // x12  = 00 00 0g g0
+        "orr        x14, x10,  x12                          \n" // x14 = 00 00 rg g0
+        "orr        x14, x14, x11,  lsr #27                 \n" // x14 = r0 g0 b0, RGB565
+
+        "subs       %[count], %[count], #1                  \n"
+        "strh       w14, [%[dst]], #2                       \n"
+        "b.gt       one_pixel                               \n"
+
+    "out:                                                   \n"
+        :[dst] "+r" (dst), [count] "+r" (count), [src] "+r" (src)
+        :
+        :"memory", "cc", "x6", "x7", "x8", "x9", "x10", "x11",
+         "x12", "x13"
+    );
+#else
     SkASSERT(255 == alpha);
 
     if (count > 0) {
@@ -61,6 +202,7 @@ static void S32A_D565_Opaque(uint16_t* SK_RESTRICT dst,
             dst += 1;
         } while (--count != 0);
     }
+#endif
 }
 
 static void S32A_D565_Blend(uint16_t* SK_RESTRICT dst,

@@ -16,8 +16,78 @@
 static void S32_Opaque_BlitRow32(SkPMColor* SK_RESTRICT dst,
                                  const SkPMColor* SK_RESTRICT src,
                                  int count, U8CPU alpha) {
+#if defined(__aarch64__)
+    /*
+     * TODO: optimize for AARCH64
+     */
     SkASSERT(255 == alpha);
     memcpy(dst, src, count * 4);
+#else
+    /*
+     * tao.zeng@amlogic.com, src and dst are algined by 4
+     */
+    asm volatile (
+        "cmp        %[count], #0                    \n"
+        "it         eq                              \n"
+        "bxeq       lr                              \n"                 // if count == 0, return
+        "pld        [%[src], #32]                   \n"
+        "tst        %[src], #0x04                   \n"                 // make aligne to 8 bytes
+        "ittt       ne                              \n"
+        "ldrne      r12, [%[src]], #4               \n"
+        "strne      r12, [%[dst]], #4               \n"
+        "subne      %[count], %[count], #1          \n"
+        "cmp        %[count], #16                   \n"                 //
+        "blt        S32_Opaque_BlitRow32_less16     \n"                 //
+        "pld        [%[src], #64]                   \n"
+        "sub        %[count], #16                   \n"
+    "S32_Opaque_BlitRow32_loop16:                   \n"
+        "vldmia     %[src]!, {q0, q1, q2, q3}       \n"
+        "pld        [%[src], #64]                   \n"
+        "pld        [%[src], #96]                   \n"
+        "subs       %[count], %[count], #16         \n"
+        "vstmia     %[dst]!, {q0, q1, q2, q3}       \n"
+        "bge        S32_Opaque_BlitRow32_loop16     \n"
+        "adds       %[count], %[count], #16         \n"
+        "cmp        %[count], #0                    \n"
+        "it         eq                              \n"
+        "bxeq       lr                              \n"
+
+    "S32_Opaque_BlitRow32_less16:                   \n"
+        "cmp        %[count], #8                    \n"
+        "blt        S32_Opaque_BlitRow32_less8      \n"
+        "vldmia     %[src]!, {q0, q1}               \n"
+        "subs       %[count], %[count], #8          \n"
+        "vstmia     %[dst]!, {q0, q1}               \n"
+        "it         eq                              \n"
+        "bxeq       lr                              \n"
+    "S32_Opaque_BlitRow32_less8:                    \n"
+        "cmp        %[count], #4                    \n"
+        "blt        S32_Opaque_BlitRow32_less4      \n"
+        "vldmia     %[src]!, {d0, d1}               \n"
+        "subs       %[count], %[count], #4          \n"
+        "vstmia     %[dst]!, {d0, d1}               \n"
+        "it         eq                              \n"
+        "bxeq       lr                              \n"
+    "S32_Opaque_BlitRow32_less4:                    \n"
+        "cmp        %[count], #2                    \n"
+        "itt        ge                              \n"
+        "ldmge      %[src]!, {%[alpha], r12}        \n"
+        "subges     %[count], #2                    \n"
+        "it         ge                              \n"
+        "stmge      %[dst]!, {%[alpha], r12}        \n"
+        "it         eq                              \n"
+        "bxeq       lr                              \n"
+        "cmp        %[count], #0                    \n"
+        "it         eq                              \n"
+        "bxeq       lr                              \n"
+        "ldr        r12, [%[src]], #4               \n"
+        "str        r12, [%[dst]], #4               \n"
+        "bx         lr                              \n"
+        :
+        :[src] "r" (src), [dst] "r" (dst), [count] "r" (count), [alpha] "r" (alpha)
+        :"cc", "memory", "r12"
+    );
+#endif
 }
 
 static void S32_Blend_BlitRow32(SkPMColor* SK_RESTRICT dst,

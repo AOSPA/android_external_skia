@@ -19,6 +19,7 @@
 #include "SkUtils.h"
 #include "SkUtilsArm.h"
 #include "SkBitmapProcState_utils.h"
+#include "SkColorPriv.h"
 
 /*  returns 0...(n-1) given any x (positive or negative).
 
@@ -335,7 +336,7 @@ static int nofilter_trans_preamble(const SkBitmapProcState& s, uint32_t** xy,
     return mapper.intX();
 }
 
-static void clampx_nofilter_trans(const SkBitmapProcState& s,
+void clampx_nofilter_trans(const SkBitmapProcState& s,
                                   uint32_t xy[], int count, int x, int y) {
     SkASSERT((s.fInvType & ~SkMatrix::kTranslate_Mask) == 0);
 
@@ -383,7 +384,143 @@ static void clampx_nofilter_trans(const SkBitmapProcState& s,
     sk_memset16(xptr, width - 1, count);
 }
 
-static void repeatx_nofilter_trans(const SkBitmapProcState& s,
+/*
+ * tao.zeng@amlogic.com, combine operation of clampx_nofilter_trans
+ * and S16_opaque_D32_nofilter_DX
+ */
+#if !defined(__aarch64__)
+extern void S16_D32_decal_nofilter_scale_t(uint16_t *srcAddr, int fx, int dx, SkPMColor dstC[], int count);
+void ClampX_S16_D32_nofilter_trans_t(const     SkBitmapProcState& s,
+                                     int       x,
+                                     int       y,
+                                     SkPMColor dstC[],
+                                     int       count)
+{
+    if (count == 0) {
+        return ;
+    }
+
+    uint16_t* SK_RESTRICT srcAddr = (uint16_t *)s.fBitmap->getPixels();
+    int xpos;
+
+    SkPoint pt;
+    s.fInvProc(s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
+               SkIntToScalar(y) + SK_ScalarHalf, &pt);
+    int tmp =s.fIntTileProcY(SkScalarToFixed(pt.fY) >> 16,
+                             s.fBitmap->height());
+    srcAddr = (uint16_t *)((char*)srcAddr + tmp * s.fBitmap->rowBytes());
+
+    xpos = SkScalarToFixed(pt.fX) >> 16;
+
+    const int width = s.fBitmap->width();
+    if (1 == width) {
+        // all of the following X values must be 0
+        sk_memset32(dstC, SkPixel16ToPixel32(srcAddr[0]), count);
+        return;
+    }
+
+    int n;
+
+    // fill before 0 as needed
+    if (xpos < 0) {
+        n = -xpos;
+        if (n > count) {
+            n = count;
+        }
+        sk_memset32(dstC, SkPixel16ToPixel32(srcAddr[0]), n);
+        count -= n;
+        if (0 == count) {
+            return;
+        }
+        dstC += n;
+        xpos = 0;
+    }
+
+    // fill in 0..width-1 if needed
+    if (xpos < width) {
+        n = width - xpos;
+        if (n > count) {
+            n = count;
+        }
+        S16_D32_decal_nofilter_scale_t(srcAddr, xpos << 16, 0x10000, dstC, n);
+        count -= n;
+        if (0 == count) {
+            return;
+        }
+        dstC += n;
+    }
+
+    // fill the remaining with the max value
+    sk_memset32(dstC, SkPixel16ToPixel32(srcAddr[width - 1]), count);
+}
+#endif
+
+// S32_opaque_D32_nofilter_DX + clampx_nofilter_trans
+void ClampX_S32_D32_nofilter_trans_t(const     SkBitmapProcState& s,
+                                     int       x,
+                                     int       y,
+                                     SkPMColor dstC[],
+                                     int       count)
+{
+    if (count == 0) {
+        return ;
+    }
+
+    uint32_t* SK_RESTRICT srcAddr = (uint32_t *)s.fBitmap->getPixels();
+    int xpos;
+
+    SkPoint pt;
+    s.fInvProc(s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
+               SkIntToScalar(y) + SK_ScalarHalf, &pt);
+    uint32_t tmp =s.fIntTileProcY(SkScalarToFixed(pt.fY) >> 16,
+                                  s.fBitmap->height());
+    srcAddr = (uint32_t *)((char*)srcAddr + tmp * s.fBitmap->rowBytes());
+
+    xpos = SkScalarToFixed(pt.fX) >> 16;
+
+    const int width = s.fBitmap->width();
+    if (1 == width) {
+        // all of the following X values must be 0
+        sk_memset32(dstC, srcAddr[0], count);
+        return;
+    }
+
+    int n;
+
+    // fill before 0 as needed
+    if (xpos < 0) {
+        n = -xpos;
+        if (n > count) {
+            n = count;
+        }
+        sk_memset32(dstC, srcAddr[0], n);
+        count -= n;
+        if (0 == count) {
+            return;
+        }
+        dstC += n;
+        xpos = 0;
+    }
+
+    // fill in 0..width-1 if needed
+    if (xpos < width) {
+        n = width - xpos;
+        if (n > count) {
+            n = count;
+        }
+        memcpy(dstC, srcAddr + xpos, n * sizeof(uint32_t));
+        count -= n;
+        if (0 == count) {
+            return;
+        }
+        dstC += n;
+    }
+
+    // fill the remaining with the max value
+    sk_memset32(dstC, srcAddr[width - 1], count);
+}
+
+void repeatx_nofilter_trans(const SkBitmapProcState& s,
                                    uint32_t xy[], int count, int x, int y) {
     SkASSERT((s.fInvType & ~SkMatrix::kTranslate_Mask) == 0);
 
@@ -416,6 +553,54 @@ static void repeatx_nofilter_trans(const SkBitmapProcState& s,
     }
 }
 
+// tao.zeng, add
+// S32_opaque_D32_nofilter_DX + repeatx_nofilter_trans
+void Repeatx_S32_D32_nofilter_trans_t(const     SkBitmapProcState& s,
+                                      int       x,
+                                      int       y,
+                                      SkPMColor dstC[],
+                                      int       count)
+{
+    SkASSERT((s.fInvType & ~SkMatrix::kTranslate_Mask) == 0);
+
+    int xpos;
+
+    const uint32_t * SK_RESTRICT srcAddr = (const uint32_t*)s.fBitmap->getPixels();
+    SkPoint pt;
+    s.fInvProc(s.fInvMatrix, SkIntToScalar(x) + SK_ScalarHalf,
+               SkIntToScalar(y) + SK_ScalarHalf, &pt);
+    uint32_t tmp = s.fIntTileProcY(SkScalarToFixed(pt.fY) >> 16,
+                                   s.fBitmap->height());
+    xpos = SkScalarToFixed(pt.fX) >> 16;
+
+    srcAddr = (uint32_t *)((char*)srcAddr + tmp * s.fBitmap->rowBytes());
+    const int width = s.fBitmap->width();
+    if (1 == width) {
+        // all of the following X values must be 0
+        sk_memset32(dstC, srcAddr[0], count);
+        return;
+    }
+
+    int start = sk_int_mod(xpos, width);
+    int n = width - start;
+    if (n > count) {
+        n = count;
+    }
+    memcpy(dstC, srcAddr + start, n * sizeof(uint32_t));
+    dstC += n;
+    count -= n;
+
+    while (count >= width) {
+        memcpy(dstC, srcAddr, width * sizeof(uint32_t));
+        dstC += width;
+        count -= width;
+    }
+
+    if (count > 0) {
+        memcpy(dstC, srcAddr, count * sizeof(uint32_t));
+    }
+}
+
 static void fill_backwards(uint16_t xptr[], int pos, int count) {
     for (int i = 0; i < count; i++) {
         SkASSERT(pos >= 0);
@@ -423,7 +608,7 @@ static void fill_backwards(uint16_t xptr[], int pos, int count) {
     }
 }
 
-static void mirrorx_nofilter_trans(const SkBitmapProcState& s,
+void mirrorx_nofilter_trans(const SkBitmapProcState& s,
                                    uint32_t xy[], int count, int x, int y) {
     SkASSERT((s.fInvType & ~SkMatrix::kTranslate_Mask) == 0);
 

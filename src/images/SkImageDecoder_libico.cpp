@@ -11,6 +11,7 @@
 #include "SkStream.h"
 #include "SkStreamPriv.h"
 #include "SkTypes.h"
+#include <cutils/log.h>
 
 class SkICOImageDecoder : public SkImageDecoder {
 public:
@@ -169,6 +170,14 @@ SkImageDecoder::Result SkICOImageDecoder::onDecode(SkStream* stream, SkBitmap* b
         return kFailure;
     }
     int bitCount = read2Bytes(buf, offset+14);
+    if (bitCount <= 8) {
+        int needlenth = (1 << bitCount) * 4 + offset + size;
+        if (needlenth > length) {
+            ALOGD("----ERROR, unsupported file format of ico");
+            ALOGD("----ERROR, bitCount:%d, offset:%d, size:%d, length:%d", bitCount, offset, size, length);
+            return kFailure;
+        }
+    }
 
     void (*placePixel)(const int pixelNo, const unsigned char* buf,
         const int xorOffset, int& x, int y, const int w,

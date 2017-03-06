@@ -15,8 +15,8 @@
 extern const SkBitmapProcState::MatrixProc ClampX_ClampY_Procs_neon[];
 extern const SkBitmapProcState::MatrixProc RepeatX_RepeatY_Procs_neon[];
 
-static void decal_nofilter_scale_neon(uint32_t dst[], SkFixed fx, SkFixed dx, int count);
-static void decal_filter_scale_neon(uint32_t dst[], SkFixed fx, SkFixed dx, int count);
+void decal_nofilter_scale_neon(uint32_t dst[], SkFixed fx, SkFixed dx, int count);
+void decal_filter_scale_neon(uint32_t dst[], SkFixed fx, SkFixed dx, int count);
 
 // TILEX_PROCF(fx, max)    SkClampMax((fx) >> 16, max)
 static inline int16x8_t sbpsm_clamp_tile8(int32x4_t low, int32x4_t high, unsigned max) {

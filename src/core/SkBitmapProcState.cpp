@@ -18,6 +18,7 @@
 #include "SkPixelRef.h"
 #include "SkImageEncoder.h"
 #include "SkResourceCache.h"
+#include <cutils/log.h>
 
 #if !SK_ARM_NEON_IS_NONE
 // These are defined in src/opts/SkBitmapProcState_arm_neon.cpp
@@ -128,6 +129,11 @@ static bool valid_for_filtering(unsigned dimension) {
  *  - sometimes we will "ignore" Low and give None, but this is likely a legacy perf hack
  *    and may be removed.
  */
+#if !defined(__aarch64__)
+extern SkBitmapProcState::ShaderProc32 SkBitmap_find_merge_proc(SkBitmapProcState::SampleProc32 fSampleProc32,
+                                                                bool clampClamp,
+                                                                SkBitmapProcState::MatrixProc fMatrixProc);
+#endif
 bool SkBitmapProcState::chooseProcs(const SkMatrix& inv, const SkPaint& paint) {
     fPixmap.reset();
     fInvMatrix = inv;
@@ -362,6 +368,11 @@ bool SkBitmapProcState::chooseScanlineProcs(bool trivialMatrix, bool clampClamp,
             fShaderProc32 = Clamp_S32_opaque_D32_nofilter_DX_shaderproc;
         }
 
+    #if !SK_ARM_NEON_IS_NONE && !defined(__aarch64__)
+        if (fShaderProc32 == NULL) {
+            fShaderProc32 = SkBitmap_find_merge_proc(fSampleProc32, clampClamp, fMatrixProc);
+        }
+    #endif
         if (nullptr == fShaderProc32) {
             fShaderProc32 = this->chooseShaderProc32();
         }

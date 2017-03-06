@@ -321,7 +321,12 @@ SkImageDecoder::Result SkGIFImageDecoder::onDecode(SkStream* sk_stream, SkBitmap
                 imageTop = 0;
             }
 
-            SkScaledBitmapSampler sampler(width, height, this->getSampleSize());
+            /*
+             * for GIF, must set sample size to 1, other wise some pictures will
+             * display wrong
+             */
+            //SkScaledBitmapSampler sampler(width, height, this->getSampleSize());
+            SkScaledBitmapSampler sampler(width, height, 1);
 
             bm->setInfo(SkImageInfo::Make(sampler.scaledWidth(), sampler.scaledHeight(),
                                           kIndex_8_SkColorType, kPremul_SkAlphaType));

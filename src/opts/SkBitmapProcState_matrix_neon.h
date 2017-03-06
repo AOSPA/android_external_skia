@@ -27,8 +27,8 @@
     #define PREAMBLE_ARG_Y
 #endif
 
-static void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
-                                uint32_t xy[], int count, int x, int y) {
+void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
+                         uint32_t xy[], int count, int x, int y) {
     SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
                              SkMatrix::kScale_Mask)) == 0);
 
@@ -107,8 +107,8 @@ static void SCALE_NOFILTER_NAME(const SkBitmapProcState& s,
     }
 }
 
-static void AFFINE_NOFILTER_NAME(const SkBitmapProcState& s,
-                                 uint32_t xy[], int count, int x, int y) {
+void AFFINE_NOFILTER_NAME(const SkBitmapProcState& s,
+                          uint32_t xy[], int count, int x, int y) {
     SkASSERT(s.fInvType & SkMatrix::kAffine_Mask);
     SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
                              SkMatrix::kScale_Mask |
@@ -179,9 +179,9 @@ static void AFFINE_NOFILTER_NAME(const SkBitmapProcState& s,
     }
 }
 
-static void PERSP_NOFILTER_NAME(const SkBitmapProcState& s,
-                                uint32_t* SK_RESTRICT xy,
-                                int count, int x, int y) {
+void PERSP_NOFILTER_NAME(const SkBitmapProcState& s,
+                         uint32_t* SK_RESTRICT xy,
+                         int count, int x, int y) {
     SkASSERT(s.fInvType & SkMatrix::kPerspective_Mask);
 
     PREAMBLE(s);
@@ -284,8 +284,8 @@ static inline int32x4_t PACK_FILTER_Y4_NAME(int32x4_t f, unsigned max,
     return ret;
 }
 
-static void SCALE_FILTER_NAME(const SkBitmapProcState& s,
-                              uint32_t xy[], int count, int x, int y) {
+void SCALE_FILTER_NAME(const SkBitmapProcState& s,
+                       uint32_t xy[], int count, int x, int y) {
     SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
                              SkMatrix::kScale_Mask)) == 0);
     SkASSERT(s.fInvKy == 0);
@@ -347,8 +347,8 @@ static void SCALE_FILTER_NAME(const SkBitmapProcState& s,
     }
 }
 
-static void AFFINE_FILTER_NAME(const SkBitmapProcState& s,
-                               uint32_t xy[], int count, int x, int y) {
+void AFFINE_FILTER_NAME(const SkBitmapProcState& s,
+                        uint32_t xy[], int count, int x, int y) {
     SkASSERT(s.fInvType & SkMatrix::kAffine_Mask);
     SkASSERT((s.fInvType & ~(SkMatrix::kTranslate_Mask |
                              SkMatrix::kScale_Mask |
@@ -408,9 +408,9 @@ static void AFFINE_FILTER_NAME(const SkBitmapProcState& s,
     }
 }
 
-static void PERSP_FILTER_NAME(const SkBitmapProcState& s,
-                              uint32_t* SK_RESTRICT xy, int count,
-                              int x, int y) {
+void PERSP_FILTER_NAME(const SkBitmapProcState& s,
+                       uint32_t* SK_RESTRICT xy, int count,
+                       int x, int y) {
     SkASSERT(s.fInvType & SkMatrix::kPerspective_Mask);
 
     PREAMBLE(s);
